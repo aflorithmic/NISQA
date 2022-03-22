@@ -29,8 +29,6 @@ def generate_sample(script, speaker, audience):
     except:
         print(f"Error with the following utterance: {utt}")
 
-    
-
 def download_audio_file(url, filename):
     with requests.get(url, stream=True) as r:
         with open(filename, 'wb') as f:
@@ -146,15 +144,19 @@ if __name__ == "__main__":
                     filename = generate_filepath(speaker, n)
                     download_audio_file(url, filename)
     
+
     if args.predict == True:
+        cl_args = []
         if args.quality == False and args.naturalness == False:
             args.quality = True 
             args.naturalness = True 
         if args.quality == True:
-            pass # add command line flags to shell scrip to handle quality/naturalness modes
+            cl_args.append('-q')
+            # pass # add command line flags to shell scrip to handle quality/naturalness modes
         if args.naturalness == True:
-            pass
-        rc = subprocess.call("./run_predict_batch.sh", shell=True)
+            cl_args.append('-n')
+        cl_str = "./run_predict_batch.sh" + ' ' + ' '.join(cl_args)
+        rc = subprocess.call(cl_str, shell=True)
     
     factors = {}
     if args.quality == True:
