@@ -55,20 +55,21 @@ def inrange_write_to_csv(filename, data, speaker, n_rows):
 
 def calculate_stats(filename, column_index):
     df = pd.read_csv(filename, header='infer')
-    mean_score = np.mean(df.iloc[:, 1])
-    sd_score = np.std(df.iloc[:, 1])
-    return mean_score, sd_score
+    mean_score = np.round(np.mean(df.iloc[:, column_index]), 2)
+    sd_score = np.round(np.std(df.iloc[:, column_index]), 2)
+    med_score = np.round(np.median(df.iloc[:, column_index]), 2)
+    return mean_score, sd_score, med_score
 
-def stats_write_to_csv(filename, data):
-    data = data.sort_values('MOS', ascending=False)
-    write_to_csv(filename, data)
+def stats_write_to_csv(filename, data, col_names):
+    data = data.sort_values('Mean MOS', ascending=False)
+    write_to_csv(filename, data, col_names)
 
-def write_to_csv(filename, data):
+def write_to_csv(filename, data, col_names):
     which_mode = 'a' if os.path.exists(filename) else 'w+'
-    data.to_csv(filename, mode=which_mode, header=False)
+    data.to_csv(filename, mode=which_mode, header=col_names)
 
-def make_df(data):
-    return pd.DataFrame(data, columns=['speaker', 'MOS', 'sd'])
+def make_df(data, col_names):
+    return pd.DataFrame(data, columns=col_names)
 
 
 if __name__ == "__main__":
@@ -76,9 +77,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run automated NISQA evaluation')
 
     parser.add_argument("--fullEval", action='store_true',help="Run all steps of evaluation")
-    parser.add_argument("--preprocess", action='store_true',help="Select subtext of German sentences without corrupted characters.")
-    parser.add_argument("--generate", action='store_true',help="Generate German samples using Aflorithmic API.")
-    parser.add_argument("--apiKey", help="You Aflorithmic API key.")
+    parser.add_argument("--preprocess", action='store_true',help="Select subtext of  sentences without corrupted characters.")
+    parser.add_argument("--generate", action='store_true',help="Generate samples using Aflorithmic API.")
+    parser.add_argument("--apiKey", help="Your Aflorithmic API key.")
     parser.add_argument("--predict", action='store_true',help="Run NISQA to predict scores.")
     parser.add_argument("--quality", action='store_true',help="Predict quality scores")
     parser.add_argument("--naturalness", action='store_true',help="Predict naturalness scores") # if neither arg provided, do both
@@ -152,27 +153,44 @@ if __name__ == "__main__":
             args.naturalness = True 
         if args.quality == True:
             cl_args.append('-q')
-            # pass # add command line flags to shell scrip to handle quality/naturalness modes
+            # add command line flags to shell scrip to handle quality/naturalness modes
         if args.naturalness == True:
             cl_args.append('-n')
+        # print(cl_args, 'x'*3000)
         cl_str = "./run_predict_batch.sh" + ' ' + ' '.join(cl_args)
         rc = subprocess.call(cl_str, shell=True)
-    
+        # print(rc, 'x'*10000)
+
     factors = {}
     if args.quality == True:
         factors['quality'] = 1
+        factors['noise'] = 2
+        factors['discontinuity'] = 3
+        factors['colouration'] = 4
+        factors['loudness'] = 5
     if args.naturalness == True:
         factors['naturalness'] = 1
 
+    # print('x'*10000, factors)
+
     if args.stats == True:
         for factor, col_index in factors.items():
-            base_dir = os.path.join(os.getcwd(), f'to_evaluate/results/{factor}')
+            print(factor)
+            csv_file = 'naturalness' if factor == 'naturalness' else 'quality'
+            base_dir = os.path.join(os.getcwd(), f'to_evaluate/results/{csv_file}')
             speaker_stats = []
             for speaker in os.listdir(base_dir):
-                mean_score, sd_score = calculate_mean_score(os.path.join(base_dir, speaker, 'NISQA_results.csv'), col_index)
-                speaker_stats.append([speaker, mean_score, sd_score])
-            speaker_stats = make_df(speaker_stats)
-            stats_write_to_csv(f'mean_NISQA_results_{factor}.csv', speaker_stats)
+                if speaker == '.DS_Store':
+                    continue
+                try:
+                    mean_score, sd_score, med_score = calculate_stats(os.path.join(base_dir, speaker, 'NISQA_results.csv'), col_index)
+                except:
+                    print(f'{speaker} missing')
+                speaker_stats.append([speaker, factor, mean_score, sd_score, med_score])
+                print(speaker, factor, mean_score, sd_score)
+            speaker_stats = make_df(speaker_stats, ['Speaker', factor, 'Mean MOS', 'S.D', 'Median MOS'])
+            col_names = ['Speaker', factor, 'Mean MOS', 'S.D', 'Median MOS'] if col_index == 1 else False
+            stats_write_to_csv(f'mean_NISQA_results.csv', speaker_stats, col_names)
 
     if args.inRange is True:
         range_min = args.min if args.min is not None else 4.6
@@ -195,6 +213,7 @@ if __name__ == "__main__":
             for speaker in os.listdir(base_dir):
                 if not os.path.exists(os.path.join(out_dir,speaker)):
                     os.mkdir(os.path.join(out_dir,speaker))
+                # try:
                 df = return_targets(os.path.join(base_dir, speaker, 'NISQA_results.csv'), col_index, range_min, range_max)
                 try:
                     copy_files(df,wav_dir, out_dir, speaker, n_files)
