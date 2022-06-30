@@ -8,8 +8,6 @@ else
     . /opt/conda/etc/profile.d/conda.sh && conda deactivate && conda activate nisqa
 fi
 
-n_flag=''
-q_flag=''
 
 print_usage() {
   printf "Usage: ..."
